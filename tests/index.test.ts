@@ -38,9 +38,6 @@ describe('fs-ctx', () => {
 
     ctx.value.count = 42
 
-    // Wait for debounced save to complete
-    await new Promise(resolve => setTimeout(resolve, 50))
-
     const filePath = join(tempDir, 'test-save.json')
     expect(fs.existsSync(filePath)).toBe(true)
 
@@ -59,9 +56,6 @@ describe('fs-ctx', () => {
     ctx1.value.message = 'world'
     ctx1.value.number = 123
 
-    // Wait for debounced save to complete
-    await new Promise(resolve => setTimeout(resolve, 50))
-
     // Create second context with same id
     const ctx2 = createFileContext('shared', {
       data: { message: '', number: 0 },
@@ -74,14 +68,11 @@ describe('fs-ctx', () => {
     expect(ctx2.value.number).toBe(123)
   })
 
-  it('should clean up temp file on dispose', async () => {
+  it('should clean up temp file on dispose', () => {
     const ctx = createFileContext('cleanup-test', {
       data: { data: 'test' },
       tempDir
     })
-
-    // Wait for initial save to complete
-    await new Promise(resolve => setTimeout(resolve, 50))
 
     const filePath = join(tempDir, 'cleanup-test.json')
 

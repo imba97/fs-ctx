@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import consola from 'consola'
 import fs from 'fs-extra'
 import { normalize } from 'pathe'
-import { debounce } from '../utils/debounce'
 import { effect, reactive } from '../utils/reactivity'
 import { fileWatcher } from './file-watcher'
 
@@ -13,7 +12,6 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
   private disposed = false
   private isUpdatingFromFile = false
   private fileChangeCallback: (filePath: string) => void
-  private debouncedSaveFile: () => void
 
   constructor(
     private id: string,
@@ -23,7 +21,6 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
     this.filePath = `${this.options.tempDir}/${this.id}.json`
 
     this.fileChangeCallback = () => this.syncFromFile()
-    this.debouncedSaveFile = debounce(() => this.saveFile(), 30)
 
     fs.ensureFileSync(this.filePath)
 
@@ -33,7 +30,7 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
 
     effect(() => {
       if (!this.disposed && !this.isUpdatingFromFile) {
-        this.debouncedSaveFile()
+        this.saveFile()
       }
     })
 
