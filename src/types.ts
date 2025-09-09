@@ -1,4 +1,4 @@
-export interface FSContextOptions {
+export interface FSContextOptions<T = any> {
   /**
    * Temporary file directory
    */
@@ -8,4 +8,9 @@ export interface FSContextOptions {
    * Whether to automatically clean up the temp file on dispose
    */
   cleanup?: boolean
+
+  /**
+   * Initial data for the context
+   */
+  data?: T
 }

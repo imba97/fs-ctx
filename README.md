@@ -42,12 +42,14 @@ pnpm install fs-ctx
 
 **Process A:**
 ```typescript
-import { createReactiveContext } from 'fs-ctx'
+import { createFileContext } from 'fs-ctx'
 
 // Create a reactive context
-const ctx = createReactiveContext('my-app', {
-  foo: 'bar',
-  count: 0
+const ctx = createFileContext('my-app', {
+  data: {
+    foo: 'bar',
+    count: 0
+  }
 })
 
 // Changes are automatically saved to file
@@ -57,10 +59,10 @@ ctx.value.count = 42
 
 **Process B:**
 ```typescript
-import { createReactiveContext } from 'fs-ctx'
+import { createFileContext } from 'fs-ctx'
 
 // Connect to the same context
-const ctx = createReactiveContext('my-app', {})
+const ctx = createFileContext('my-app')
 
 // Read data from Process A
 console.log(ctx.value.foo) // 'baz'
@@ -72,20 +74,22 @@ ctx.value.status = 'ready'
 
 ## API Reference
 
-### `createReactiveContext<T>(id, initialData, options?)`
+### `createFileContext(id, options?)`
+
+Creates a reactive file context.
 
 **Parameters:**
-- `id` (string): Unique identifier for the context
-- `initialData` (T): Initial data object
-- `options?` (FSContextOptions): Configuration options
+- `id` (string): Unique identifier for the context (required)
+- `options?` (FSContextOptions<T>): Configuration options including initial data (optional)
 
 **Returns:** `ReactiveFileContext<T>` with `value` property and `dispose()` method
 
 ### Configuration Options
 
 ```typescript
-interface FSContextOptions {
+interface FSContextOptions<T = any> {
   tempDir?: string // Custom temp directory
   cleanup?: boolean // Auto-remove file on dispose (default: true)
+  data?: T // Initial data for the context
 }
 ```
