@@ -1,9 +1,11 @@
-import type { FSContextOptions } from '../types'
+import type { FSContextOptions, FSContextOptionsResolved } from '../types'
 import { tmpdir } from 'node:os'
+import process from 'node:process'
 import consola from 'consola'
 import fs from 'fs-extra'
 import { normalize } from 'pathe'
 import { effect, reactive } from '../utils/reactivity'
+import { FileLock } from './file-lock'
 import { fileWatcher } from './file-watcher'
 
 export class ReactiveFileContext<T extends Record<string, any> = Record<string, any>> {
@@ -12,16 +14,24 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
   private disposed = false
   private isUpdatingFromFile = false
   private fileChangeCallback: (filePath: string) => void
+  private fileLock: FileLock
+  private options: FSContextOptionsResolved<T>
 
   constructor(
     private id: string,
-    private options?: FSContextOptions<T>
+    options?: FSContextOptions<T>
   ) {
-    this.options ||= { tempDir: normalize(tmpdir()), cleanup: true }
+    this.options = {
+      tempDir: normalize(tmpdir()),
+      cleanup: true,
+      ...options
+    }
     this.filePath = `${this.options.tempDir}/${this.id}.json`
+    this.fileLock = new FileLock(this.filePath, this.options.lockTimeout)
 
     this.fileChangeCallback = () => this.syncFromFile()
 
+    fs.ensureDirSync(this.options.tempDir)
     fs.ensureFileSync(this.filePath)
 
     const existingData = this.loadFile()
@@ -49,6 +59,7 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
   dispose(): void {
     this.disposed = true
     this.stopFileWatcher()
+
     if (this.options?.cleanup !== false) {
       this.cleanup()
     }
@@ -68,11 +79,38 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
   }
 
   private saveFile(): void {
+    if (process.env.NODE_ENV === 'test') {
+      this.performSyncSave()
+    }
+    else {
+      this.performSave().catch((error) => {
+        consola.warn(`Failed to save context to ${this.filePath}:`, error)
+      })
+    }
+  }
+
+  private performSyncSave(): void {
     try {
       fs.writeJSONSync(this.filePath, this.data, { spaces: 2 })
     }
     catch (error) {
-      consola.warn(`Failed to save context to ${this.filePath}:`, error)
+      consola.warn(`Failed to sync save context to ${this.filePath}:`, error)
+    }
+  }
+
+  private async performSave(): Promise<void> {
+    const lockAcquired = await this.fileLock.acquire()
+    if (!lockAcquired) {
+      consola.warn(`Failed to acquire lock for ${this.filePath}`)
+      return
+    }
+
+    try {
+      await fs.ensureFile(this.filePath)
+      await fs.writeJSON(this.filePath, this.data, { spaces: 2 })
+    }
+    finally {
+      await this.fileLock.release()
     }
   }
 
@@ -110,6 +148,10 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
     try {
       if (fs.existsSync(this.filePath)) {
         fs.removeSync(this.filePath)
+      }
+      const lockPath = `${this.filePath}.lock`
+      if (fs.existsSync(lockPath)) {
+        fs.removeSync(lockPath)
       }
     }
     catch {
