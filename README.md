@@ -64,6 +64,9 @@ import { createFileContext } from 'fs-ctx'
 // Connect to the same context
 const ctx = createFileContext('my-app')
 
+// Wait for data to be available (handles race conditions)
+await ctx.ready()
+
 // Read data from Process A
 console.log(ctx.value.foo) // 'baz'
 console.log(ctx.value.count) // 42
@@ -82,7 +85,24 @@ Creates a reactive file context.
 - `id` (string): Unique identifier for the context (required)
 - `options?` (FSContextOptions<T>): Configuration options including initial data (optional)
 
-**Returns:** `ReactiveFileContext<T>` with `value` property and `dispose()` method
+**Returns:** `ReactiveFileContext<T>` with `value` property, `ready()` method, and `dispose()` method
+
+### Methods
+
+#### `ready(): Promise<void>`
+
+Waits for the context to be initialized before accessing data. This is useful for handling cross-process race conditions where one process might try to read data before another process has finished writing.
+
+**Example:**
+```typescript
+const ctx = createFileContext('my-app')
+await ctx.ready() // Wait for data to be available
+console.log(ctx.value.data) // Safe to access
+```
+
+#### `dispose(): void`
+
+Cleans up file watchers and removes the temporary context file (if `cleanup` option is true).
 
 ### Configuration Options
 

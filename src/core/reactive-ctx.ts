@@ -13,6 +13,7 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
   private data: T
   private disposed = false
   private isUpdatingFromFile = false
+  private initialized = false
   private fileChangeCallback: (filePath: string) => void
   private fileLock: FileLock
   private options: FSContextOptionsResolved<T>
@@ -38,6 +39,11 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
     const initialData = this.options.data
     this.data = reactive({ ...(initialData || {}), ...existingData }) as T
 
+    // Mark as initialized if we have existing data or initial data
+    if (Object.keys(existingData).length > 0 || (initialData && Object.keys(initialData).length > 0)) {
+      this.initialized = true
+    }
+
     effect(() => {
       if (!this.disposed && !this.isUpdatingFromFile) {
         this.saveFile()
@@ -49,6 +55,36 @@ export class ReactiveFileContext<T extends Record<string, any> = Record<string, 
 
   get value(): T {
     return this.data
+  }
+
+  async ready(): Promise<void> {
+    if (this.initialized) {
+      return
+    }
+
+    const maxRetries = 10
+    const retryDelay = 50
+
+    for (let i = 0; i < maxRetries; i++) {
+      if (fs.existsSync(this.filePath)) {
+        try {
+          const data = await fs.readJSON(this.filePath)
+          if (data && Object.keys(data).length > 0) {
+            Object.assign(this.data, data)
+            this.initialized = true
+            return
+          }
+        }
+        catch {
+          // File might be being written, retry
+        }
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelay))
+    }
+
+    // If we get here, either the file doesn't exist or is empty
+    // Mark as initialized anyway to avoid infinite waiting
+    this.initialized = true
   }
 
   /**

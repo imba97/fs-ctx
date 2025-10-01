@@ -123,4 +123,87 @@ describe('fs-ctx', () => {
     contexts.push(ctx4)
     expect(ctx4.value.count).toBe(42)
   })
+
+  it('should handle ready() when context is already initialized', async () => {
+    const ctx = createFileContext('ready-test-1', {
+      data: { foo: 'bar' },
+      tempDir
+    })
+    contexts.push(ctx)
+
+    // Should resolve immediately since context is already initialized
+    await ctx.ready()
+    expect(ctx.value.foo).toBe('bar')
+  })
+
+  it('should wait for data to be available with ready()', async () => {
+    const filePath = join(tempDir, 'ready-test-2.json')
+
+    // Create empty context first (simulating Process A reading before Process B writes)
+    const ctx1 = createFileContext('ready-test-2', { tempDir })
+    contexts.push(ctx1)
+
+    // Simulate another process writing data after a delay
+    setTimeout(() => {
+      fs.writeJSONSync(filePath, { message: 'hello', count: 42 })
+    }, 100)
+
+    // Wait for data to be available
+    await ctx1.ready()
+
+    // Data should be loaded
+    expect(ctx1.value.message).toBe('hello')
+    expect(ctx1.value.count).toBe(42)
+  })
+
+  it('should handle cross-process race condition', async () => {
+    // Process B writes data first
+    const ctxB = createFileContext('race-test', {
+      data: { status: 'processing', value: 100 },
+      tempDir
+    })
+    contexts.push(ctxB)
+
+    // Small delay to ensure file is written
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    // Process A reads data
+    const ctxA = createFileContext('race-test', { tempDir })
+    contexts.push(ctxA)
+
+    // Wait for data to be ready
+    await ctxA.ready()
+
+    // Should have the data from Process B
+    expect(ctxA.value.status).toBe('processing')
+    expect(ctxA.value.value).toBe(100)
+  })
+
+  it('should handle ready() timeout gracefully when no data is written', async () => {
+    // Create context without initial data and no other process writing
+    const ctx = createFileContext('ready-timeout-test', { tempDir })
+    contexts.push(ctx)
+
+    // Should complete after timeout without throwing
+    await expect(ctx.ready()).resolves.toBeUndefined()
+
+    // Context should be empty
+    expect(ctx.value).toEqual({})
+  })
+
+  it('should allow multiple ready() calls', async () => {
+    const ctx = createFileContext('ready-multiple-test', {
+      data: { test: 'value' },
+      tempDir
+    })
+    contexts.push(ctx)
+
+    // Call ready() multiple times
+    await ctx.ready()
+    await ctx.ready()
+    await ctx.ready()
+
+    // Should still work correctly
+    expect(ctx.value.test).toBe('value')
+  })
 })
